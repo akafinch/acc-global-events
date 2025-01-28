@@ -4,12 +4,14 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any
 import redis
+import aiohttp
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from opentelemetry import trace
 from prometheus_client import Counter, Histogram, Gauge
 import logging
 from pythonjsonlogger import jsonlogger
+from base64 import b64encode
 
 # Configure logging
 logger = logging.getLogger()
@@ -33,6 +35,13 @@ events_processed = Counter('events_processed_total', 'Total events processed', [
 processing_time = Histogram('event_processing_seconds', 'Time spent processing events')
 queue_depth = Gauge('event_queue_depth', 'Current event queue depth')
 
+# TrafficPeak Configuration
+TRAFFICPEAK_URL = os.getenv("TRAFFICPEAK_URL", "https://api.trafficpeak.com/v1/metrics")
+TRAFFICPEAK_TOKEN = os.getenv("TRAFFICPEAK_TOKEN")
+TRAFFICPEAK_TABLE = os.getenv("TRAFFICPEAK_TABLE", "event_metrics")
+TRAFFICPEAK_USERNAME = os.getenv("TRAFFICPEAK_USERNAME")
+TRAFFICPEAK_PASSWORD = os.getenv("TRAFFICPEAK_PASSWORD")
+
 class EventPayload(BaseModel):
     type: str
     properties: Dict[str, Any]
@@ -52,9 +61,51 @@ class Metrics(BaseModel):
     tags: Dict[str, str]
 
 async def send_metrics_to_trafficpeak(metrics: Metrics):
-    # Implementation for sending metrics to TrafficPeak
-    # This would be implemented based on TrafficPeak's API specifications
-    pass
+    if not all([TRAFFICPEAK_USERNAME, TRAFFICPEAK_PASSWORD, TRAFFICPEAK_TOKEN]):
+        logger.error("TrafficPeak credentials not configured")
+        return False
+
+    try:
+        # Create basic auth header
+        auth_string = f"{TRAFFICPEAK_USERNAME}:{TRAFFICPEAK_PASSWORD}"
+        auth_bytes = auth_string.encode('ascii')
+        base64_auth = b64encode(auth_bytes).decode('ascii')
+        
+        headers = {
+            "Authorization": f"Basic {base64_auth}",
+            "Content-Type": "application/json",
+            "X-API-Token": TRAFFICPEAK_TOKEN
+        }
+
+        payload = {
+            "table_name": TRAFFICPEAK_TABLE,
+            "timestamp": metrics.timestamp,
+            "region": metrics.region,
+            "metrics": metrics.metrics,
+            "tags": metrics.tags
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                TRAFFICPEAK_URL,
+                json=payload,
+                headers=headers,
+                timeout=10  # 10 seconds timeout
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Failed to send metrics to TrafficPeak: {error_text}")
+                    return False
+                    
+                logger.info(f"Successfully sent metrics to TrafficPeak for region {metrics.region}")
+                return True
+
+    except asyncio.TimeoutError:
+        logger.error("Timeout while sending metrics to TrafficPeak")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending metrics to TrafficPeak: {str(e)}")
+        return False
 
 @app.post("/process")
 async def process_event(event: Event):

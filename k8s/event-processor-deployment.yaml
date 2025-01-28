@@ -31,6 +31,31 @@ spec:
               key: region
         - name: ENVIRONMENT
           value: production
+        - name: TRAFFICPEAK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: trafficpeak-config
+              key: url
+        - name: TRAFFICPEAK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: trafficpeak-secrets
+              key: api-token
+        - name: TRAFFICPEAK_TABLE
+          valueFrom:
+            configMapKeyRef:
+              name: trafficpeak-config
+              key: table-name
+        - name: TRAFFICPEAK_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: trafficpeak-secrets
+              key: username
+        - name: TRAFFICPEAK_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trafficpeak-secrets
+              key: password
         resources:
           requests:
             memory: "512Mi"

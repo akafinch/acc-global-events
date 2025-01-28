@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trafficpeak-config
+data:
+  url: "https://api.trafficpeak.com/v1/metrics"
+  table-name: "event_metrics"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: trafficpeak-secrets
+type: Opaque
+# Note: The following values should be base64 encoded in production
+# Example: echo -n "your-value" | base64
+data:
+  api-token: ${TRAFFICPEAK_TOKEN}
+  username: ${TRAFFICPEAK_USERNAME}
+  password: ${TRAFFICPEAK_PASSWORD}
